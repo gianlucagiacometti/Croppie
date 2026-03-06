@@ -1078,10 +1078,18 @@
             minW = vpData.width / imgData.width;
             minH = vpData.height / imgData.height;
             minZoom = Math.max(minW, minH);
+            if (minZoom > 1) { minZoom = 1 }
         }
 
-        if (minZoom >= maxZoom) {
-            maxZoom = minZoom + 1;
+        if (self.options.maxZoom) {
+            if (minZoom > maxZoom) {
+                maxZoom = minZoom + 1;
+            }
+        }
+        else {
+            if (minZoom >= maxZoom) {
+                maxZoom = minZoom + 1;
+            }
         }
 
         zoomer.min = fix(minZoom, 4);
@@ -1089,6 +1097,9 @@
 
         if (!initial && (scale < zoomer.min || scale > zoomer.max)) {
             _setZoomerVal.call(self, scale < zoomer.min ? zoomer.min : zoomer.max);
+        }
+        else if (initial && self.options.initialZoomMin) {
+            _setZoomerVal.call(self, minZoom);
         }
         else if (initial) {
             defaultInitialZoom = Math.max((boundaryData.width / imgData.width), (boundaryData.height / imgData.height));
@@ -1634,3 +1645,4 @@
     });
     return Croppie;
 }));
+
