@@ -428,6 +428,10 @@
         if (self.options.enableResize) {
             _initializeResize.call(self);
         }
+   
+         if (self.options.enableResizeWithRatio) {
+            _initializeRatioResize.call(self);
+        }
     }
 
     // function _initRotationControls () {
@@ -462,6 +466,139 @@
 
     function _hasExif() {
         return this.options.enableExif && window.EXIF;
+    }
+
+    function _initializeRatioResize() {
+        var self = this;
+        var wrap = document.createElement('div');
+        var isDragging = false;
+        var direction;
+        var originalY;
+        var minSize = 50;
+        var maxWidth;
+        var maxHeight;
+        var ratio = self.options.viewport.width / self.options.viewport.height;
+        var tr;
+        var br;
+
+        addClass(wrap, 'cr-resizer');
+        css(wrap, {
+            width: this.options.viewport.width + 'px',
+            height: this.options.viewport.height + 'px'
+        });
+
+        tr = document.createElement('div');
+        addClass(tr, 'cr-resizer-top-right');
+        wrap.appendChild(tr);
+
+        br = document.createElement('div');
+        addClass(br, 'cr-resizer-bottom-right');
+        wrap.appendChild(br);
+
+        function getDirection(className) {
+            if(className.indexOf('top-right') >= 0) {
+                return 'tr';
+            }
+            if(className.indexOf('bottom-right') >= 0) {
+                return 'br';
+            }
+        }
+
+        function mouseDown(ev) {
+            if (ev.button !== undefined && ev.button !== 0) return;
+
+            ev.preventDefault();
+            if (isDragging) {
+                return;
+            }
+
+            var overlayRect = self.elements.overlay.getBoundingClientRect();
+
+            isDragging = true;
+            originalX = ev.pageX;
+            originalY = ev.pageY;
+            direction = getDirection(ev.currentTarget.className);
+            maxWidth = overlayRect.width;
+            maxHeight = overlayRect.height;
+            if (ev.touches) {
+                var touches = ev.touches[0];
+                originalX = touches.pageX;
+                originalY = touches.pageY;
+            }
+            window.addEventListener('mousemove', mouseMove);
+            window.addEventListener('touchmove', mouseMove);
+            window.addEventListener('mouseup', mouseUp);
+            window.addEventListener('touchend', mouseUp);
+            document.body.style[CSS_USERSELECT] = 'none';
+        }
+
+        function mouseMove(ev) {
+            var pageX = ev.pageX;
+            var pageY = ev.pageY;
+            var newVHeight;
+            var newVWidth;
+            ev.preventDefault();
+
+            if (ev.touches) {
+                var touches = ev.touches[0];
+                pageX = touches.pageX;
+                pageY = touches.pageY;
+            }
+
+            var deltaY = pageY - originalY;
+            var deltaX = deltaY * ratio;
+            
+            if(direction === 'tr') {
+                newVHeight = self.options.viewport.height - deltaY;
+                newVWidth = self.options.viewport.width - deltaX;
+            }
+            if(direction === 'br') {
+                newVHeight = self.options.viewport.height + deltaY;
+                newVWidth = self.options.viewport.width + deltaX;
+            }
+            if(
+             (newVHeight && newVHeight >= minSize && newVHeight <= maxHeight && newVHeight <= self.options.boundary.height)
+              && 
+             (newVWidth && newVWidth >= minSize && newVWidth <= maxWidth && newVWidth <= self.options.boundary.width)
+             ) {
+                css(wrap, {
+                    height: newVHeight + 'px',
+                    width:  newVWidth + 'px'
+                });
+                self.options.viewport.height = newVHeight;
+                self.options.viewport.width = newVWidth;
+
+                css(self.elements.viewport, {
+                    height: self.options.viewport.height + 'px',
+                    width: self.options.viewport.width + 'px'
+                });
+            }
+
+            _updateOverlay.call(self);
+            _updateZoomLimits.call(self);
+            _updateCenterPoint.call(self);
+            _triggerUpdate.call(self);
+            originalY = pageY;
+            originalX = pageX;
+        }
+
+        function mouseUp() {
+            isDragging = false;
+            window.removeEventListener('mousemove', mouseMove);
+            window.removeEventListener('touchmove', mouseMove);
+            window.removeEventListener('mouseup', mouseUp);
+            window.removeEventListener('touchend', mouseUp);
+            document.body.style[CSS_USERSELECT] = '';
+        }
+
+        tr.addEventListener('mousedown', mouseDown);
+        tr.addEventListener('touchstart', mouseDown);
+       
+        br.addEventListener('mousedown', mouseDown);
+        br.addEventListener('touchstart', mouseDown);
+
+
+        this.elements.boundary.appendChild(wrap);
     }
 
     function _initializeResize () {
@@ -1241,6 +1378,14 @@
 
         // console.table({ left, right, top, bottom, canvasWidth, canvasHeight, width, height, startX, startY, circle, sx, sy, dx, dy, sWidth, sHeight, dWidth, dHeight });
 
+        // When the pixel from source position is directly transfered to the destination position, loosing all the neighbouring pixels information. The resulting image may often look very noisy.
+		// Set these properties is a simple area-average downsampling, producing preferable results with relatively small processing time.
+		ctx.mozImageSmoothingEnabled = true;
+		ctx.imageSmoothingQuality = "high";
+		ctx.webkitImageSmoothingEnabled = true;
+		ctx.msImageSmoothingEnabled = true;
+		ctx.imageSmoothingEnabled = true;
+
         ctx.drawImage(this.elements.preview, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight);
         if (circle) {
             ctx.fillStyle = '#fff';
@@ -1486,6 +1631,8 @@
 
         self.data.orientation = getExifOffset(self.data.orientation, deg);
         drawCanvas(canvas, self.elements.img, self.data.orientation);
+        self._originalImageWidth = canvas.width;
+        self._originalImageHeight = canvas.height;
         _updateCenterPoint.call(self, true);
         _updateZoomLimits.call(self);
 
@@ -1650,5 +1797,6 @@
     });
     return Croppie;
 }));
+
 
 
